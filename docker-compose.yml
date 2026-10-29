@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: alienx
+      POSTGRES_USER: alienx
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alienx-local-only}
+    volumes:
+      - alienx-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alienx -d alienx"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://alienx:${POSTGRES_PASSWORD:-alienx-local-only}@db:5432/alienx
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-local-demo-secret-before-deployment}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-30}
+      REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS:-7}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      NLP_SEMANTIC_ENABLED: ${NLP_SEMANTIC_ENABLED:-false}
+      NLP_MODEL_NAME: ${NLP_MODEL_NAME:-sentence-transformers/all-MiniLM-L6-v2}
+      GRADING_AUTO_ACCEPT_THRESHOLD: ${GRADING_AUTO_ACCEPT_THRESHOLD:-0.75}
+      GRADING_REVIEW_THRESHOLD: ${GRADING_REVIEW_THRESHOLD:-0.25}
+      NLP_SPACY_ENABLED: ${NLP_SPACY_ENABLED:-false}
+      SPACY_MODEL_NAME: ${SPACY_MODEL_NAME:-en_core_web_sm}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  alienx-postgres:

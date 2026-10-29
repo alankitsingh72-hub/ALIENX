@@ -1,0 +1,3 @@
+# Optional semantic similarity and language-aware keyword processing.
+sentence-transformers>=2.6,<4.0
+spacy>=3.7,<4.0
